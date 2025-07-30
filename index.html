@@ -131,8 +131,22 @@
     </div>
 
     <script type="module">
-        // Variável global para armazenar os produtos localmente
-        let products = [];
+        // Importa as funções do Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, setDoc, addDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis globais para Firebase e autenticação
+        let app;
+        let db;
+        let auth;
+        let userId;
+        let products = []; // Para armazenar os produtos carregados do Firestore
+
+        // Configurações do Firebase (fornecidas pelo ambiente Canvas)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // Elementos do DOM
         const productsContainer = document.getElementById('products-container');
@@ -237,44 +251,84 @@
             return [];
         }
 
-        // --- Funções de Interação com LocalStorage ---
+        // --- Funções de Interação com Firestore ---
 
-        // Salva a lista atual de produtos no localStorage
-        function saveProductsToLocalStorage() {
-            localStorage.setItem('myCatalogProducts', JSON.stringify(products));
-        }
-
-        // Carrega a lista de produtos do localStorage
-        function loadProductsFromLocalStorage() {
-            const storedProducts = localStorage.getItem('myCatalogProducts');
-            return storedProducts ? JSON.parse(storedProducts) : [];
-        }
-
-        // Adiciona ou atualiza um produto na lista local e no localStorage
-        function addOrUpdateProductLocally(productData) {
-            if (productData.id) {
-                // Se o produto já tem um ID, é uma edição
-                const index = products.findIndex(p => p.id === productData.id);
-                if (index !== -1) {
-                    products[index] = productData;
-                } else {
-                    // Se não encontrou, adiciona como novo (caso raro, mas para segurança)
-                    products.push(productData);
-                }
-            } else {
-                // Se não tem ID, é um novo produto, gera um ID único
-                productData.id = crypto.randomUUID();
-                products.push(productData);
+        // Função para adicionar ou atualizar um único produto no Firestore
+        async function addOrUpdateProductToFirestore(productData) {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return;
             }
-            saveProductsToLocalStorage();
-            renderProducts(products); // Renderiza novamente para mostrar a mudança
+            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            try {
+                if (productData.id) {
+                    // Atualiza um produto existente
+                    const docRef = doc(productsCollectionRef, productData.id);
+                    await setDoc(docRef, productData, { merge: true }); // merge: true para atualizar apenas os campos fornecidos
+                    console.log("Produto atualizado com ID: ", productData.id);
+                } else {
+                    // Adiciona um novo produto (Firestore gera o ID)
+                    const docRef = await addDoc(productsCollectionRef, productData);
+                    console.log("Novo produto adicionado com ID: ", docRef.id);
+                }
+                await loadProducts(); // Recarrega os produtos após salvar
+            } catch (e) {
+                console.error("Erro ao salvar/atualizar produto: ", e);
+            }
         }
 
-        // Exclui um produto da lista local e do localStorage
-        function deleteProductLocally(productId) {
-            products = products.filter(p => p.id !== productId);
-            saveProductsToLocalStorage();
-            renderProducts(products); // Renderiza novamente para mostrar a mudança
+        // Função para salvar uma lista de produtos gerados (e.g., pela Gemini) no Firestore
+        async function saveGeneratedProductsToFirestore(productsArray) {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return;
+            }
+            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            const savePromises = productsArray.map(async (product) => {
+                try {
+                    // Gemini fornece um 'id', então usamos setDoc com esse ID
+                    const docRef = doc(productsCollectionRef, product.id);
+                    await setDoc(docRef, product);
+                } catch (e) {
+                    console.error("Erro ao adicionar documento gerado: ", e);
+                }
+            });
+            await Promise.all(savePromises); // Aguarda todos os saves serem concluídos
+        }
+
+        // Função para carregar produtos do Firestore
+        async function loadProductsFromFirestore() {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return [];
+            }
+            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            const loadedProducts = [];
+            try {
+                const querySnapshot = await getDocs(productsCollectionRef);
+                querySnapshot.forEach((doc) => {
+                    loadedProducts.push({ id: doc.id, ...doc.data() });
+                });
+            } catch (e) {
+                console.error("Erro ao carregar documentos: ", e);
+            }
+            return loadedProducts;
+        }
+
+        // Função para excluir um produto do Firestore
+        async function deleteProductFromFirestore(productId) {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return;
+            }
+            const productDocRef = doc(db, `artifacts/${appId}/users/${userId}/products`, productId);
+            try {
+                await deleteDoc(productDocRef);
+                console.log("Produto excluído com ID: ", productId);
+                await loadProducts(); // Recarrega os produtos após excluir
+            } catch (e) {
+                console.error("Erro ao excluir produto: ", e);
+            }
         }
 
         // --- Funções de UI ---
@@ -376,21 +430,21 @@
 
         // --- Funções Principais ---
 
-        // Carrega os produtos (do localStorage ou gera com Gemini se vazio)
-        async function loadAndDisplayProducts() {
+        // Carrega os produtos (do Firestore ou gera com Gemini se vazio)
+        async function loadProducts() {
             refreshText.textContent = 'Carregando...';
             loadingSpinner.classList.remove('hidden');
             refreshButton.disabled = true;
 
-            products = loadProductsFromLocalStorage(); // Tenta carregar do localStorage
+            products = await loadProductsFromFirestore(); // Carrega do Firestore
 
             if (products.length === 0) {
-                console.log("Nenhum produto no localStorage, gerando com Gemini...");
+                console.log("Nenhum produto no Firestore, gerando com Gemini...");
                 const prompt = `Gere uma lista de 6 produtos populares para um catálogo online. Cada produto deve ter um 'id' único (string), 'name' (string), 'description' (string curta), 'price' (número) e 'imageUrl' (string de URL de placeholder ou genérica). Exemplo de formato: [{"id": "prod1", "name": "Produto A", "description": "Descrição do Produto A", "price": 29.99, "imageUrl": "https://placehold.co/400x300/e0e0e0/ffffff?text=Produto+A"}]. As imagens podem ser URLs de placeholder como 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'.`;
                 const generatedProducts = await generateProductsWithGemini(prompt);
                 if (generatedProducts.length > 0) {
-                    products = generatedProducts; // Atualiza a lista global de produtos
-                    saveProductsToLocalStorage(); // Salva os produtos gerados no localStorage
+                    await saveGeneratedProductsToFirestore(generatedProducts); // Salva os produtos gerados no Firestore
+                    products = generatedProducts; // Atualiza a lista local com os produtos gerados
                 }
             }
 
@@ -402,6 +456,49 @@
         }
 
         // --- Inicialização e Event Listeners ---
+
+        // Inicializa o Firebase e carrega/gera produtos
+        async function initializeFirebaseAndLoadProducts() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Autentica o usuário e carrega produtos APÓS autenticação
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Usuário autenticado:", userId);
+                        await loadProducts(); // Carrega produtos APÓS userId estar garantido
+                    } else {
+                        // Se não houver usuário, tenta login anônimo
+                        if (!initialAuthToken) {
+                            await signInAnonymously(auth);
+                            // onAuthStateChanged será chamado novamente com o usuário anônimo
+                        } else {
+                            // Se houver token inicial mas o usuário ainda não está logado, tenta com o token
+                            await signInWithCustomToken(auth, initialAuthToken);
+                            // onAuthStateChanged será chamado novamente com o usuário do token
+                        }
+                        // Se ainda não houver user (e.g., token inválido ou erro), renderiza vazio
+                        if (!auth.currentUser) {
+                            console.error("Não foi possível obter um userId após tentativas de autenticação. Não carregando produtos.");
+                            renderProducts([]);
+                            refreshText.textContent = 'Erro ao carregar';
+                            loadingSpinner.classList.add('hidden');
+                            refreshButton.disabled = false;
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro ao inicializar Firebase ou autenticar:", error);
+                renderProducts([]); // Renderiza vazio em caso de erro grave
+                refreshText.textContent = 'Erro ao carregar';
+                loadingSpinner.classList.add('hidden');
+                refreshButton.disabled = false;
+            }
+        }
 
         // Event listener para o botão "Adicionar Produto"
         addProductButton.addEventListener('click', () => openProductModal());
@@ -429,11 +526,11 @@
                 productData.id = id; // Se for edição, mantém o ID existente
             }
 
-            addOrUpdateProductLocally(productData); // Adiciona/atualiza localmente
+            await addOrUpdateProductToFirestore(productData); // Adiciona/atualiza no Firestore
             closeProductModal(); // Fecha o modal após salvar
         });
 
-        // Event listener para o botão "Atualizar Produtos" (recarrega do localStorage ou gera novos)
+        // Event listener para o botão "Atualizar Produtos" (recarrega do Firestore ou gera novos)
         refreshButton.addEventListener('click', async () => {
             // Limpa os produtos existentes antes de gerar novos
             productsContainer.innerHTML = '';
@@ -447,13 +544,19 @@
             const newProducts = await generateProductsWithGemini(prompt);
 
             if (newProducts.length > 0) {
-                products = newProducts; // Substitui a lista global de produtos
-                saveProductsToLocalStorage(); // Salva a nova lista no localStorage
+                // Remove os produtos antigos do Firestore antes de salvar os novos
+                const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+                const querySnapshot = await getDocs(productsCollectionRef);
+                // Aguarda todas as exclusões antes de adicionar os novos
+                await Promise.all(querySnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+                // Salva os novos produtos gerados
+                await saveGeneratedProductsToFirestore(newProducts);
+                products = newProducts; // Atualiza a lista local com os produtos recém-gerados
             } else {
-                products = []; // Se não gerou nada, esvazia a lista
-                saveProductsToLocalStorage();
+                products = []; // Se não gerou nada, esvazia a lista local
             }
-            renderProducts(products); // Renderiza os produtos recém-gerados
+            renderProducts(products); // Renderiza os produtos (recém-gerados ou vazios)
 
             refreshText.textContent = 'Atualizar Produtos';
             loadingSpinner.classList.add('hidden');
@@ -461,7 +564,7 @@
         });
 
         // Inicia a aplicação quando a janela estiver totalmente carregada
-        window.onload = loadAndDisplayProducts;
+        window.onload = initializeFirebaseAndLoadProducts;
     </script>
 </body>
 </html>
