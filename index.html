@@ -125,7 +125,6 @@
             <p class="text-gray-600 mb-6">Tem certeza que deseja excluir este produto?</p>
             <div class="flex justify-center space-x-4">
                 <button id="cancelDeleteButton" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Cancelar</button>
-                <!-- CORREÇÃO AQUI: Garante que o ID do botão de confirmação está correto no HTML -->
                 <button id="confirmDeleteButton" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Excluir</button>
             </div>
         </div>
@@ -171,7 +170,6 @@
         const productModal = document.getElementById('productModal');
         const modalTitle = document.getElementById('modalTitle');
         const productForm = document.getElementById('productForm');
-        // CORREÇÃO AQUI: Removido o 'document =' duplicado
         const productIdInput = document.getElementById('productId');
         const productNameInput = document.getElementById('productName');
         const productDescriptionInput = document.getElementById('productDescription');
@@ -183,7 +181,6 @@
         // Elementos do Modal de Confirmação
         const confirmModal = document.getElementById('confirmModal');
         const cancelDeleteButton = document.getElementById('cancelDeleteButton');
-        // CORREÇÃO AQUI: ID do botão de confirmação
         const confirmDeleteButton = document.getElementById('confirmDeleteButton');
         let productToDeleteId = null; // Variável para armazenar o ID do produto a ser excluído
 
@@ -494,33 +491,35 @@
                 auth = getAuth(app);
                 console.log("Firebase inicializado.");
 
-                // Autentica o usuário e carrega produtos APÓS autenticação
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        console.log("Usuário autenticado:", userId);
-                        await loadProducts(); // Carrega produtos APÓS userId estar garantido
-                    } else {
-                        console.log("Nenhum usuário autenticado. Tentando login anônimo...");
-                        // Se não houver usuário, tenta login anônimo
-                        if (!initialAuthToken) {
-                            await signInAnonymously(auth);
-                            // onAuthStateChanged será chamado novamente com o usuário anônimo
+                // Garante que o usuário esteja autenticado (anônimo se necessário)
+                // e que o userId esteja definido antes de carregar os produtos.
+                let currentUser = auth.currentUser;
+                if (!currentUser) {
+                    console.log("Nenhum usuário autenticado. Tentando login anônimo...");
+                    try {
+                        if (initialAuthToken) {
+                            const userCredential = await signInWithCustomToken(auth, initialAuthToken);
+                            currentUser = userCredential.user;
                         } else {
-                            // Se houver token inicial mas o usuário ainda não está logado, tenta com o token
-                            await signInWithCustomToken(auth, initialAuthToken);
-                            // onAuthStateChanged será chamado novamente com o usuário do token
+                            const userCredential = await signInAnonymously(auth);
+                            currentUser = userCredential.user;
                         }
-                        // Se ainda não houver user (e.g., token inválido ou erro), renderiza vazio
-                        if (!auth.currentUser) {
-                            console.error("Não foi possível obter um userId após tentativas de autenticação. Não carregando produtos.");
-                            renderProducts([]);
-                            refreshText.textContent = 'Erro ao carregar';
-                            loadingSpinner.classList.add('hidden');
-                            refreshButton.disabled = false;
-                        }
+                        console.log("Login anônimo/com token bem-sucedido.");
+                    } catch (authError) {
+                        console.error("Erro durante o login anônimo/com token:", authError);
+                        // Se o login falhar, não podemos prosseguir com o Firestore
+                        console.error("Não foi possível autenticar o usuário. Não carregando produtos.");
+                        renderProducts([]);
+                        refreshText.textContent = 'Erro de autenticação';
+                        loadingSpinner.classList.add('hidden');
+                        refreshButton.disabled = false;
+                        return; // Sai da função se a autenticação falhar
                     }
-                });
+                }
+
+                userId = currentUser.uid;
+                console.log("Usuário autenticado:", userId);
+                await loadProducts(); // Carrega produtos APÓS userId estar garantido
 
             } catch (error) {
                 console.error("Erro ao inicializar Firebase ou autenticar:", error);
