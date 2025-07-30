@@ -170,7 +170,8 @@
         const productModal = document.getElementById('productModal');
         const modalTitle = document.getElementById('modalTitle');
         const productForm = document.getElementById('productForm');
-        const productIdInput = document = document.getElementById('productId');
+        // CORREÇÃO AQUI: Removido o 'document =' duplicado
+        const productIdInput = document.getElementById('productId');
         const productNameInput = document.getElementById('productName');
         const productDescriptionInput = document.getElementById('productDescription');
         const productPriceInput = document.getElementById('productPrice');
@@ -181,7 +182,8 @@
         // Elementos do Modal de Confirmação
         const confirmModal = document.getElementById('confirmModal');
         const cancelDeleteButton = document.getElementById('cancelDeleteButton');
-        const confirmDeleteButton = document.getElementById('confirmButton'); // Correção aqui: era 'confirmDeleteButton'
+        // CORREÇÃO AQUI: ID do botão de confirmação
+        const confirmDeleteButton = document.getElementById('confirmDeleteButton');
         let productToDeleteId = null; // Variável para armazenar o ID do produto a ser excluído
 
         // --- Funções de Utilitário ---
