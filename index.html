@@ -24,16 +24,54 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        /* Estilo para o modal (escondido por padrão) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh; /* Limita a altura para caber em telas menores */
+            overflow-y: auto; /* Adiciona scroll se o conteúdo for muito grande */
+        }
+        /* Estilo para o modal de confirmação */
+        .confirm-modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex flex-col min-h-screen">
     <header class="bg-blue-600 text-white p-4 shadow-md">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold">Meu Catálogo</h1>
-            <button id="refreshButton" class="bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center justify-center">
-                <span id="refreshText">Atualizar Produtos</span>
-                <div id="loadingSpinner" class="loading-spinner hidden ml-2"></div>
-            </button>
+        <div class="container mx-auto flex flex-col sm:flex-row justify-between items-center">
+            <h1 class="text-2xl font-bold mb-2 sm:mb-0">Meu Catálogo</h1>
+            <div class="flex space-x-2">
+                <button id="addProductButton" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center justify-center">
+                    Adicionar Produto
+                </button>
+                <button id="refreshButton" class="bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center justify-center">
+                    <span id="refreshText">Atualizar Produtos</span>
+                    <div id="loadingSpinner" class="loading-spinner hidden ml-2"></div>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -42,7 +80,7 @@
             <!-- Produtos serão carregados aqui pelo JavaScript -->
         </div>
         <div id="no-products-message" class="hidden text-center text-gray-600 mt-8 text-lg">
-            Nenhum produto encontrado. Por favor, tente atualizar.
+            Nenhum produto encontrado. Clique em "Adicionar Produto" ou "Atualizar Produtos" para começar!
         </div>
     </main>
 
@@ -50,11 +88,53 @@
         <p>&copy; 2024 Meu Catálogo. Todos os direitos reservados.</p>
     </footer>
 
+    <!-- Modal para Adicionar/Editar Produto -->
+    <div id="productModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modalTitle" class="text-2xl font-bold text-gray-800 mb-6">Adicionar Novo Produto</h2>
+            <form id="productForm" class="space-y-4">
+                <input type="hidden" id="productId">
+                <div>
+                    <label for="productName" class="block text-gray-700 text-sm font-bold mb-2">Nome do Produto:</label>
+                    <input type="text" id="productName" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                </div>
+                <div>
+                    <label for="productDescription" class="block text-gray-700 text-sm font-bold mb-2">Descrição:</label>
+                    <textarea id="productDescription" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" rows="3" required></textarea>
+                </div>
+                <div>
+                    <label for="productPrice" class="block text-gray-700 text-sm font-bold mb-2">Preço (R$):</label>
+                    <input type="number" id="productPrice" step="0.01" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                </div>
+                <div>
+                    <label for="productImageUrl" class="block text-gray-700 text-sm font-bold mb-2">URL da Imagem:</label>
+                    <input type="url" id="productImageUrl" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="https://exemplo.com/imagem.jpg">
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" id="cancelProductButton" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Cancelar</button>
+                    <button type="submit" id="saveProductButton" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Salvar Produto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação de Exclusão -->
+    <div id="confirmModal" class="modal-overlay hidden">
+        <div class="confirm-modal-content">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Confirmar Exclusão</h2>
+            <p class="text-gray-600 mb-6">Tem certeza que deseja excluir este produto?</p>
+            <div class="flex justify-center space-x-4">
+                <button id="cancelDeleteButton" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Cancelar</button>
+                <button id="confirmDeleteButton" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Excluir</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         // Importa as funções do Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, getDocs, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, doc, setDoc, addDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Variáveis globais para Firebase e autenticação
         let app;
@@ -67,11 +147,33 @@
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
+        // Elementos do DOM
         const productsContainer = document.getElementById('products-container');
         const noProductsMessage = document.getElementById('no-products-message');
         const refreshButton = document.getElementById('refreshButton');
         const refreshText = document.getElementById('refreshText');
         const loadingSpinner = document.getElementById('loadingSpinner');
+        const addProductButton = document.getElementById('addProductButton');
+
+        // Elementos do Modal de Produto
+        const productModal = document.getElementById('productModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const productForm = document.getElementById('productForm');
+        const productIdInput = document.getElementById('productId');
+        const productNameInput = document.getElementById('productName');
+        const productDescriptionInput = document.getElementById('productDescription');
+        const productPriceInput = document.getElementById('productPrice');
+        const productImageUrlInput = document.getElementById('productImageUrl');
+        const cancelProductButton = document.getElementById('cancelProductButton');
+        const saveProductButton = document.getElementById('saveProductButton');
+
+        // Elementos do Modal de Confirmação
+        const confirmModal = document.getElementById('confirmModal');
+        const cancelDeleteButton = document.getElementById('cancelDeleteButton');
+        const confirmDeleteButton = document.getElementById('confirmDeleteButton');
+        let productToDeleteId = null; // Variável para armazenar o ID do produto a ser excluído
+
+        // --- Funções de Utilitário ---
 
         // Função para simular a chamada à API Gemini para gerar produtos
         async function generateProductsWithGemini(prompt) {
@@ -148,21 +250,29 @@
             return [];
         }
 
-        // Função para salvar produtos no Firestore
-        async function saveProductsToFirestore(products) {
+        // --- Funções de Interação com Firestore ---
+
+        // Função para salvar (adicionar ou atualizar) um produto no Firestore
+        async function saveProductToFirestore(product) {
             if (!db || !userId) {
                 console.error("Firestore ou userId não inicializados.");
                 return;
             }
             const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
-            for (const product of products) {
-                try {
-                    // Usar setDoc com um ID gerado ou um ID do produto se disponível
-                    const docRef = doc(productsCollectionRef, product.id || crypto.randomUUID());
-                    await setDoc(docRef, product);
-                } catch (e) {
-                    console.error("Erro ao adicionar documento: ", e);
+            try {
+                if (product.id) {
+                    // Atualiza um produto existente
+                    const docRef = doc(productsCollectionRef, product.id);
+                    await setDoc(docRef, product, { merge: true }); // merge: true para atualizar apenas os campos fornecidos
+                    console.log("Produto atualizado com ID: ", product.id);
+                } else {
+                    // Adiciona um novo produto (Firestore gera o ID)
+                    const docRef = await addDoc(productsCollectionRef, product);
+                    console.log("Novo produto adicionado com ID: ", docRef.id);
                 }
+                await loadProducts(); // Recarrega os produtos após salvar
+            } catch (e) {
+                console.error("Erro ao salvar produto: ", e);
             }
         }
 
@@ -173,10 +283,9 @@
                 return [];
             }
             const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
-            const q = query(productsCollectionRef); // Pode adicionar `where` se necessário para filtrar
             const products = [];
             try {
-                const querySnapshot = await getDocs(q);
+                const querySnapshot = await getDocs(productsCollectionRef);
                 querySnapshot.forEach((doc) => {
                     products.push({ id: doc.id, ...doc.data() });
                 });
@@ -185,6 +294,24 @@
             }
             return products;
         }
+
+        // Função para excluir um produto do Firestore
+        async function deleteProductFromFirestore(productId) {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return;
+            }
+            const productDocRef = doc(db, `artifacts/${appId}/users/${userId}/products`, productId);
+            try {
+                await deleteDoc(productDocRef);
+                console.log("Produto excluído com ID: ", productId);
+                await loadProducts(); // Recarrega os produtos após excluir
+            } catch (e) {
+                console.error("Erro ao excluir produto: ", e);
+            }
+        }
+
+        // --- Funções de UI ---
 
         // Função para renderizar os produtos na página
         function renderProducts(products) {
@@ -204,20 +331,30 @@
                         <h2 class="text-xl font-semibold text-gray-800 mb-2">${product.name}</h2>
                         <p class="text-gray-600 text-sm mb-4">${product.description}</p>
                         <div class="flex justify-between items-center mb-4">
-                            <span class="text-2xl font-bold text-blue-600">R$ ${product.price.toFixed(2).replace('.', ',')}</span>
+                            <span class="text-2xl font-bold text-blue-600">R$ ${product.price ? product.price.toFixed(2).replace('.', ',') : '0,00'}</span>
                         </div>
-                        <button class="share-button bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg w-full transition duration-300 ease-in-out"
-                                data-name="${product.name}"
-                                data-description="${product.description}"
-                                data-price="${product.price.toFixed(2).replace('.', ',')}">
-                            Compartilhar no WhatsApp
-                        </button>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                            <button class="share-button bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg w-full sm:w-auto transition duration-300 ease-in-out"
+                                    data-name="${product.name}"
+                                    data-description="${product.description}"
+                                    data-price="${product.price ? product.price.toFixed(2).replace('.', ',') : '0,00'}">
+                                Compartilhar no WhatsApp
+                            </button>
+                            <button class="edit-button bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg w-full sm:w-auto transition duration-300 ease-in-out"
+                                    data-id="${product.id}">
+                                Editar
+                            </button>
+                            <button class="delete-button bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg w-full sm:w-auto transition duration-300 ease-in-out"
+                                    data-id="${product.id}">
+                                Excluir
+                            </button>
+                        </div>
                     </div>
                 `;
                 productsContainer.appendChild(productCard);
             });
 
-            // Adiciona event listeners aos botões de compartilhamento
+            // Adiciona event listeners aos botões de compartilhamento, edição e exclusão
             document.querySelectorAll('.share-button').forEach(button => {
                 button.addEventListener('click', (event) => {
                     const name = event.target.dataset.name;
@@ -228,10 +365,53 @@
                     window.open(whatsappUrl, '_blank');
                 });
             });
+
+            document.querySelectorAll('.edit-button').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const productId = event.target.dataset.id;
+                    const productToEdit = products.find(p => p.id === productId);
+                    if (productToEdit) {
+                        openProductModal(productToEdit);
+                    }
+                });
+            });
+
+            document.querySelectorAll('.delete-button').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    productToDeleteId = event.target.dataset.id;
+                    confirmModal.classList.remove('hidden');
+                });
+            });
         }
 
-        // Função principal para carregar ou gerar produtos
-        async function loadOrCreateProducts() {
+        // Abre o modal de produto (para adicionar ou editar)
+        function openProductModal(product = null) {
+            productForm.reset(); // Limpa o formulário
+            productIdInput.value = ''; // Limpa o ID oculto
+
+            if (product) {
+                modalTitle.textContent = 'Editar Produto';
+                productIdInput.value = product.id;
+                productNameInput.value = product.name;
+                productDescriptionInput.value = product.description;
+                productPriceInput.value = product.price;
+                productImageUrlInput.value = product.imageUrl || '';
+            } else {
+                modalTitle.textContent = 'Adicionar Novo Produto';
+            }
+            productModal.classList.remove('hidden');
+        }
+
+        // Fecha o modal de produto
+        function closeProductModal() {
+            productModal.classList.add('hidden');
+            productForm.reset();
+        }
+
+        // --- Funções Principais ---
+
+        // Carrega os produtos (do Firestore ou gera com Gemini se vazio)
+        async function loadProducts() {
             refreshText.textContent = 'Carregando...';
             loadingSpinner.classList.remove('hidden');
             refreshButton.disabled = true;
@@ -243,7 +423,7 @@
                 const prompt = `Gere uma lista de 6 produtos populares para um catálogo online. Cada produto deve ter um 'id' único (string), 'name' (string), 'description' (string curta), 'price' (número) e 'imageUrl' (string de URL de placeholder ou genérica). Exemplo de formato: [{"id": "prod1", "name": "Produto A", "description": "Descrição do Produto A", "price": 29.99, "imageUrl": "https://placehold.co/400x300/e0e0e0/ffffff?text=Produto+A"}]. As imagens podem ser URLs de placeholder como 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'.`;
                 products = await generateProductsWithGemini(prompt);
                 if (products.length > 0) {
-                    await saveProductsToFirestore(products);
+                    await saveProductToFirestore(products); // Salva os produtos gerados
                 }
             }
 
@@ -254,6 +434,8 @@
             refreshButton.disabled = false;
         }
 
+        // --- Inicialização e Event Listeners ---
+
         // Inicializa o Firebase e carrega/gera produtos
         async function initializeFirebaseAndLoadProducts() {
             try {
@@ -262,63 +444,92 @@
                 auth = getAuth(app);
 
                 // Autentica o usuário
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // Define o userId após a autenticação
-                onAuthStateChanged(auth, (user) => {
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                         console.log("Usuário autenticado:", userId);
-                        // Carrega os produtos após a autenticação
-                        loadOrCreateProducts();
                     } else {
-                        console.log("Nenhum usuário logado. Usando ID anônimo.");
-                        userId = crypto.randomUUID(); // Fallback para ID anônimo se não houver token
-                        loadOrCreateProducts();
+                        // Se não houver token inicial, tenta login anônimo
+                        if (!initialAuthToken) {
+                            await signInAnonymously(auth);
+                            userId = auth.currentUser?.uid || crypto.randomUUID(); // Garante userId após login anônimo
+                        } else {
+                             // Se houver token inicial mas o usuário ainda não está logado, tenta com o token
+                            await signInWithCustomToken(auth, initialAuthToken);
+                            userId = auth.currentUser?.uid;
+                        }
+                        console.log("Usuário logado ou ID anônimo:", userId);
+                    }
+                    // Carrega os produtos após a autenticação e definição do userId
+                    if (userId) {
+                        await loadProducts();
+                    } else {
+                        console.error("Não foi possível obter um userId. Não carregando produtos.");
+                        renderProducts([]); // Renderiza vazio se não conseguir userId
                     }
                 });
 
             } catch (error) {
                 console.error("Erro ao inicializar Firebase ou autenticar:", error);
-                // Se houver um erro grave na inicialização, ainda tenta renderizar algo
-                renderProducts([]);
+                renderProducts([]); // Renderiza vazio em caso de erro grave
                 refreshText.textContent = 'Erro ao carregar';
                 loadingSpinner.classList.add('hidden');
                 refreshButton.disabled = false;
             }
         }
 
-        // Adiciona o evento de clique ao botão de atualização
-        refreshButton.addEventListener('click', async () => {
-            // Limpa os produtos existentes antes de gerar novos
-            productsContainer.innerHTML = '';
-            noProductsMessage.classList.add('hidden');
-            refreshText.textContent = 'Gerando novos...';
-            loadingSpinner.classList.remove('hidden');
-            refreshButton.disabled = true;
+        // Event listener para o botão "Adicionar Produto"
+        addProductButton.addEventListener('click', () => openProductModal());
 
-            // Gera novos produtos com a API Gemini
-            const prompt = `Gere uma lista de 6 produtos populares e diferentes dos anteriores para um catálogo online. Cada produto deve ter um 'id' único (string), 'name' (string), 'description' (string curta), 'price' (número) e 'imageUrl' (string de URL de placeholder ou genérica). Exemplo de formato: [{"id": "prod1", "name": "Produto A", "description": "Descrição do Produto A", "price": 29.99, "imageUrl": "https://placehold.co/400x300/e0e0e0/ffffff?text=Produto+A"}]. As imagens podem ser URLs de placeholder como 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'.`;
-            const newProducts = await generateProductsWithGemini(prompt);
+        // Event listener para o botão "Cancelar" no modal de produto
+        cancelProductButton.addEventListener('click', closeProductModal);
 
-            if (newProducts.length > 0) {
-                // Remove os produtos antigos do Firestore antes de salvar os novos
-                const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
-                const querySnapshot = await getDocs(productsCollectionRef);
-                querySnapshot.forEach(async (doc) => {
-                    await deleteDoc(doc.ref);
-                });
-                await saveProductsToFirestore(newProducts);
+        // Event listener para o envio do formulário no modal de produto
+        productForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Impede o recarregamento da página
+
+            const id = productIdInput.value;
+            const name = productNameInput.value.trim();
+            const description = productDescriptionInput.value.trim();
+            const price = parseFloat(productPriceInput.value);
+            const imageUrl = productImageUrlInput.value.trim();
+
+            if (!name || !description || isNaN(price)) {
+                console.error("Por favor, preencha todos os campos obrigatórios (Nome, Descrição, Preço).");
+                return;
             }
-            renderProducts(newProducts);
 
-            refreshText.textContent = 'Atualizar Produtos';
-            loadingSpinner.classList.add('hidden');
-            refreshButton.disabled = false;
+            const productData = { name, description, price, imageUrl };
+            if (id) {
+                productData.id = id; // Se for edição, mantém o ID existente
+            }
+
+            // Se for uma lista de produtos (vindo do Gemini), precisa iterar e salvar um por um
+            if (Array.isArray(productData)) {
+                for (const prod of productData) {
+                    await saveProductToFirestore(prod);
+                }
+            } else {
+                await saveProductToFirestore(productData);
+            }
+            closeProductModal(); // Fecha o modal após salvar
+        });
+
+        // Event listener para o botão "Atualizar Produtos" (recarrega do Firestore)
+        refreshButton.addEventListener('click', loadProducts);
+
+        // Event listeners para o modal de confirmação de exclusão
+        cancelDeleteButton.addEventListener('click', () => {
+            confirmModal.classList.add('hidden');
+            productToDeleteId = null;
+        });
+
+        confirmDeleteButton.addEventListener('click', async () => {
+            if (productToDeleteId) {
+                await deleteProductFromFirestore(productToDeleteId);
+                confirmModal.classList.add('hidden');
+                productToDeleteId = null;
+            }
         });
 
         // Inicia a aplicação quando a janela estiver totalmente carregada
