@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Catálogo de Produtos</title>
+    <!-- Inclui Tailwind CSS para estilização rápida e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f8f8;
+        }
+        /* Estilo para o botão de loading */
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col min-h-screen">
+    <header class="bg-blue-600 text-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">Meu Catálogo</h1>
+            <button id="refreshButton" class="bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center justify-center">
+                <span id="refreshText">Atualizar Produtos</span>
+                <div id="loadingSpinner" class="loading-spinner hidden ml-2"></div>
+            </button>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 flex-grow">
+        <div id="products-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Produtos serão carregados aqui pelo JavaScript -->
+        </div>
+        <div id="no-products-message" class="hidden text-center text-gray-600 mt-8 text-lg">
+            Nenhum produto encontrado. Por favor, tente atualizar.
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white p-4 text-center mt-auto">
+        <p>&copy; 2024 Meu Catálogo. Todos os direitos reservados.</p>
+    </footer>
+
+    <script type="module">
+        // Importa as funções do Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis globais para Firebase e autenticação
+        let app;
+        let db;
+        let auth;
+        let userId;
+
+        // Configurações do Firebase (fornecidas pelo ambiente Canvas)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const productsContainer = document.getElementById('products-container');
+        const noProductsMessage = document.getElementById('no-products-message');
+        const refreshButton = document.getElementById('refreshButton');
+        const refreshText = document.getElementById('refreshText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+
+        // Função para simular a chamada à API Gemini para gerar produtos
+        async function generateProductsWithGemini(prompt) {
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+            const payload = {
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                "id": { "type": "STRING" },
+                                "name": { "type": "STRING" },
+                                "description": { "type": "STRING" },
+                                "price": { "type": "NUMBER" },
+                                "imageUrl": { "type": "STRING" }
+                            },
+                            "propertyOrdering": ["id", "name", "description", "price", "imageUrl"]
+                        }
+                    }
+                }
+            };
+
+            const apiKey = ""; // A chave API será fornecida pelo ambiente Canvas
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            let retries = 0;
+            const maxRetries = 5;
+            const baseDelay = 1000; // 1 second
+
+            while (retries < maxRetries) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429) { // Too Many Requests
+                            const delay = baseDelay * Math.pow(2, retries) + Math.random() * 1000; // Exponential backoff with jitter
+                            console.warn(`Rate limit hit. Retrying in ${delay / 1000}s...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            retries++;
+                            continue;
+                        }
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const json = result.candidates[0].content.parts[0].text;
+                        return JSON.parse(json);
+                    } else {
+                        console.error("Estrutura de resposta inesperada da API Gemini:", result);
+                        return [];
+                    }
+                } catch (error) {
+                    console.error("Erro ao chamar a API Gemini:", error);
+                    // For network errors or other non-429 errors, retry as well
+                    const delay = baseDelay * Math.pow(2, retries) + Math.random() * 1000;
+                    console.warn(`Error fetching from Gemini API. Retrying in ${delay / 1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    retries++;
+                }
+            }
+            console.error("Máximo de tentativas de API Gemini atingido. Falha ao gerar produtos.");
+            return [];
+        }
+
+        // Função para salvar produtos no Firestore
+        async function saveProductsToFirestore(products) {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return;
+            }
+            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            for (const product of products) {
+                try {
+                    // Usar setDoc com um ID gerado ou um ID do produto se disponível
+                    const docRef = doc(productsCollectionRef, product.id || crypto.randomUUID());
+                    await setDoc(docRef, product);
+                } catch (e) {
+                    console.error("Erro ao adicionar documento: ", e);
+                }
+            }
+        }
+
+        // Função para carregar produtos do Firestore
+        async function loadProductsFromFirestore() {
+            if (!db || !userId) {
+                console.error("Firestore ou userId não inicializados.");
+                return [];
+            }
+            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            const q = query(productsCollectionRef); // Pode adicionar `where` se necessário para filtrar
+            const products = [];
+            try {
+                const querySnapshot = await getDocs(q);
+                querySnapshot.forEach((doc) => {
+                    products.push({ id: doc.id, ...doc.data() });
+                });
+            } catch (e) {
+                console.error("Erro ao carregar documentos: ", e);
+            }
+            return products;
+        }
+
+        // Função para renderizar os produtos na página
+        function renderProducts(products) {
+            productsContainer.innerHTML = ''; // Limpa o container antes de adicionar novos produtos
+            if (products.length === 0) {
+                noProductsMessage.classList.remove('hidden');
+                return;
+            }
+            noProductsMessage.classList.add('hidden');
+
+            products.forEach(product => {
+                const productCard = document.createElement('div');
+                productCard.className = 'bg-white rounded-lg shadow-lg overflow-hidden transform transition duration-300 hover:scale-105';
+                productCard.innerHTML = `
+                    <img src="${product.imageUrl || 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'}" alt="${product.name}" class="w-full h-48 object-cover object-center" onerror="this.onerror=null;this.src='https://placehold.co/400x300/e0e0e0/ffffff?text=Produto';">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-2">${product.name}</h2>
+                        <p class="text-gray-600 text-sm mb-4">${product.description}</p>
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-2xl font-bold text-blue-600">R$ ${product.price.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        <button class="share-button bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg w-full transition duration-300 ease-in-out"
+                                data-name="${product.name}"
+                                data-description="${product.description}"
+                                data-price="${product.price.toFixed(2).replace('.', ',')}">
+                            Compartilhar no WhatsApp
+                        </button>
+                    </div>
+                `;
+                productsContainer.appendChild(productCard);
+            });
+
+            // Adiciona event listeners aos botões de compartilhamento
+            document.querySelectorAll('.share-button').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const name = event.target.dataset.name;
+                    const description = event.target.dataset.description;
+                    const price = event.target.dataset.price;
+                    const message = `Confira este produto:\n\n*${name}*\n${description}\n*Preço: R$ ${price}*\n\n#MeuCatalogo`;
+                    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+                    window.open(whatsappUrl, '_blank');
+                });
+            });
+        }
+
+        // Função principal para carregar ou gerar produtos
+        async function loadOrCreateProducts() {
+            refreshText.textContent = 'Carregando...';
+            loadingSpinner.classList.remove('hidden');
+            refreshButton.disabled = true;
+
+            let products = await loadProductsFromFirestore();
+
+            if (products.length === 0) {
+                console.log("Nenhum produto no Firestore, gerando com Gemini...");
+                const prompt = `Gere uma lista de 6 produtos populares para um catálogo online. Cada produto deve ter um 'id' único (string), 'name' (string), 'description' (string curta), 'price' (número) e 'imageUrl' (string de URL de placeholder ou genérica). Exemplo de formato: [{"id": "prod1", "name": "Produto A", "description": "Descrição do Produto A", "price": 29.99, "imageUrl": "https://placehold.co/400x300/e0e0e0/ffffff?text=Produto+A"}]. As imagens podem ser URLs de placeholder como 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'.`;
+                products = await generateProductsWithGemini(prompt);
+                if (products.length > 0) {
+                    await saveProductsToFirestore(products);
+                }
+            }
+
+            renderProducts(products);
+
+            refreshText.textContent = 'Atualizar Produtos';
+            loadingSpinner.classList.add('hidden');
+            refreshButton.disabled = false;
+        }
+
+        // Inicializa o Firebase e carrega/gera produtos
+        async function initializeFirebaseAndLoadProducts() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Autentica o usuário
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Define o userId após a autenticação
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Usuário autenticado:", userId);
+                        // Carrega os produtos após a autenticação
+                        loadOrCreateProducts();
+                    } else {
+                        console.log("Nenhum usuário logado. Usando ID anônimo.");
+                        userId = crypto.randomUUID(); // Fallback para ID anônimo se não houver token
+                        loadOrCreateProducts();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro ao inicializar Firebase ou autenticar:", error);
+                // Se houver um erro grave na inicialização, ainda tenta renderizar algo
+                renderProducts([]);
+                refreshText.textContent = 'Erro ao carregar';
+                loadingSpinner.classList.add('hidden');
+                refreshButton.disabled = false;
+            }
+        }
+
+        // Adiciona o evento de clique ao botão de atualização
+        refreshButton.addEventListener('click', async () => {
+            // Limpa os produtos existentes antes de gerar novos
+            productsContainer.innerHTML = '';
+            noProductsMessage.classList.add('hidden');
+            refreshText.textContent = 'Gerando novos...';
+            loadingSpinner.classList.remove('hidden');
+            refreshButton.disabled = true;
+
+            // Gera novos produtos com a API Gemini
+            const prompt = `Gere uma lista de 6 produtos populares e diferentes dos anteriores para um catálogo online. Cada produto deve ter um 'id' único (string), 'name' (string), 'description' (string curta), 'price' (número) e 'imageUrl' (string de URL de placeholder ou genérica). Exemplo de formato: [{"id": "prod1", "name": "Produto A", "description": "Descrição do Produto A", "price": 29.99, "imageUrl": "https://placehold.co/400x300/e0e0e0/ffffff?text=Produto+A"}]. As imagens podem ser URLs de placeholder como 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'.`;
+            const newProducts = await generateProductsWithGemini(prompt);
+
+            if (newProducts.length > 0) {
+                // Remove os produtos antigos do Firestore antes de salvar os novos
+                const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+                const querySnapshot = await getDocs(productsCollectionRef);
+                querySnapshot.forEach(async (doc) => {
+                    await deleteDoc(doc.ref);
+                });
+                await saveProductsToFirestore(newProducts);
+            }
+            renderProducts(newProducts);
+
+            refreshText.textContent = 'Atualizar Produtos';
+            loadingSpinner.classList.add('hidden');
+            refreshButton.disabled = false;
+        });
+
+        // Inicia a aplicação quando a janela estiver totalmente carregada
+        window.onload = initializeFirebaseAndLoadProducts;
+    </script>
+</body>
+</html>
