@@ -190,6 +190,7 @@
 
         // Função para simular a chamada à API Gemini para gerar produtos
         async function generateProductsWithGemini(prompt) {
+            console.log("Chamando Gemini para gerar produtos...");
             let chatHistory = [];
             chatHistory.push({ role: "user", parts: [{ text: prompt }] });
 
@@ -245,6 +246,7 @@
                         result.candidates[0].content && result.candidates[0].content.parts &&
                         result.candidates[0].content.parts.length > 0) {
                         const json = result.candidates[0].content.parts[0].text;
+                        console.log("Produtos gerados pela Gemini (JSON):", json);
                         return JSON.parse(json);
                     } else {
                         console.error("Estrutura de resposta inesperada da API Gemini:", result);
@@ -267,8 +269,9 @@
 
         // Função para adicionar ou atualizar um único produto no Firestore
         async function addOrUpdateProductToFirestore(productData) {
+            console.log("Tentando salvar/atualizar produto no Firestore:", productData);
             if (!db || !userId) {
-                console.error("Firestore ou userId não inicializados.");
+                console.error("Firestore ou userId não inicializados. Não é possível salvar produto.");
                 return;
             }
             const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
@@ -285,14 +288,15 @@
                 }
                 await loadProducts(); // Recarrega os produtos após salvar
             } catch (e) {
-                console.error("Erro ao salvar/atualizar produto: ", e);
+                console.error("Erro ao salvar/atualizar produto no Firestore: ", e);
             }
         }
 
         // Função para salvar uma lista de produtos gerados (e.g., pela Gemini) no Firestore
         async function saveGeneratedProductsToFirestore(productsArray) {
+            console.log("Tentando salvar produtos gerados no Firestore:", productsArray);
             if (!db || !userId) {
-                console.error("Firestore ou userId não inicializados.");
+                console.error("Firestore ou userId não inicializados. Não é possível salvar produtos gerados.");
                 return;
             }
             const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
@@ -302,16 +306,18 @@
                     const docRef = doc(productsCollectionRef, product.id);
                     await setDoc(docRef, product);
                 } catch (e) {
-                    console.error("Erro ao adicionar documento gerado: ", e);
+                    console.error("Erro ao adicionar documento gerado no Firestore: ", e);
                 }
             });
             await Promise.all(savePromises); // Aguarda todos os saves serem concluídos
+            console.log("Todos os produtos gerados foram processados para salvar no Firestore.");
         }
 
         // Função para carregar produtos do Firestore
         async function loadProductsFromFirestore() {
+            console.log("Tentando carregar produtos do Firestore...");
             if (!db || !userId) {
-                console.error("Firestore ou userId não inicializados.");
+                console.error("Firestore ou userId não inicializados. Não é possível carregar produtos.");
                 return [];
             }
             const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
@@ -321,16 +327,18 @@
                 querySnapshot.forEach((doc) => {
                     loadedProducts.push({ id: doc.id, ...doc.data() });
                 });
+                console.log("Produtos carregados do Firestore:", loadedProducts);
             } catch (e) {
-                console.error("Erro ao carregar documentos: ", e);
+                console.error("Erro ao carregar documentos do Firestore: ", e);
             }
             return loadedProducts;
         }
 
         // Função para excluir um produto do Firestore
         async function deleteProductFromFirestore(productId) {
+            console.log("Tentando excluir produto do Firestore com ID:", productId);
             if (!db || !userId) {
-                console.error("Firestore ou userId não inicializados.");
+                console.error("Firestore ou userId não inicializados. Não é possível excluir produto.");
                 return;
             }
             const productDocRef = doc(db, `artifacts/${appId}/users/${userId}/products`, productId);
@@ -339,7 +347,7 @@
                 console.log("Produto excluído com ID: ", productId);
                 await loadProducts(); // Recarrega os produtos após excluir
             } catch (e) {
-                console.error("Erro ao excluir produto: ", e);
+                console.error("Erro ao excluir produto do Firestore: ", e);
             }
         }
 
@@ -347,6 +355,7 @@
 
         // Função para renderizar os produtos na página
         function renderProducts(productsToRender) {
+            console.log("Renderizando produtos:", productsToRender);
             productsContainer.innerHTML = ''; // Limpa o container antes de adicionar novos produtos
             if (productsToRender.length === 0) {
                 noProductsMessage.classList.remove('hidden');
@@ -432,18 +441,21 @@
                 modalTitle.textContent = 'Adicionar Novo Produto';
             }
             productModal.classList.remove('hidden');
+            console.log("Modal de produto aberto.");
         }
 
         // Fecha o modal de produto
         function closeProductModal() {
             productModal.classList.add('hidden');
             productForm.reset();
+            console.log("Modal de produto fechado.");
         }
 
         // --- Funções Principais ---
 
         // Carrega os produtos (do Firestore ou gera com Gemini se vazio)
         async function loadProducts() {
+            console.log("Iniciando loadProducts...");
             refreshText.textContent = 'Carregando...';
             loadingSpinner.classList.remove('hidden');
             refreshButton.disabled = true;
@@ -451,7 +463,7 @@
             products = await loadProductsFromFirestore(); // Carrega do Firestore
 
             if (products.length === 0) {
-                console.log("Nenhum produto no Firestore, gerando com Gemini...");
+                console.log("Nenhum produto encontrado no Firestore. Tentando gerar com Gemini...");
                 const prompt = `Gere uma lista de 6 produtos populares para um catálogo online. Cada produto deve ter um 'id' único (string), 'name' (string), 'description' (string curta), 'price' (número) e 'imageUrl' (string de URL de placeholder ou genérica). Exemplo de formato: [{"id": "prod1", "name": "Produto A", "description": "Descrição do Produto A", "price": 29.99, "imageUrl": "https://placehold.co/400x300/e0e0e0/ffffff?text=Produto+A"}]. As imagens podem ser URLs de placeholder como 'https://placehold.co/400x300/e0e0e0/ffffff?text=Produto'.`;
                 const generatedProducts = await generateProductsWithGemini(prompt);
                 if (generatedProducts.length > 0) {
@@ -461,6 +473,7 @@
             }
 
             renderProducts(products);
+            console.log("LoadProducts concluído.");
 
             refreshText.textContent = 'Atualizar Produtos';
             loadingSpinner.classList.add('hidden');
@@ -471,10 +484,12 @@
 
         // Inicializa o Firebase e carrega/gera produtos
         async function initializeFirebaseAndLoadProducts() {
+            console.log("Iniciando initializeFirebaseAndLoadProducts...");
             try {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
+                console.log("Firebase inicializado.");
 
                 // Autentica o usuário e carrega produtos APÓS autenticação
                 onAuthStateChanged(auth, async (user) => {
@@ -483,6 +498,7 @@
                         console.log("Usuário autenticado:", userId);
                         await loadProducts(); // Carrega produtos APÓS userId estar garantido
                     } else {
+                        console.log("Nenhum usuário autenticado. Tentando login anônimo...");
                         // Se não houver usuário, tenta login anônimo
                         if (!initialAuthToken) {
                             await signInAnonymously(auth);
@@ -513,14 +529,21 @@
         }
 
         // Event listener para o botão "Adicionar Produto"
-        addProductButton.addEventListener('click', () => openProductModal());
+        addProductButton.addEventListener('click', () => {
+            console.log("Botão 'Adicionar Produto' clicado.");
+            openProductModal();
+        });
 
         // Event listener para o botão "Cancelar" no modal de produto
-        cancelProductButton.addEventListener('click', closeProductModal);
+        cancelProductButton.addEventListener('click', () => {
+            console.log("Botão 'Cancelar' clicado no modal.");
+            closeProductModal();
+        });
 
         // Event listener para o envio do formulário no modal de produto
         productForm.addEventListener('submit', async (event) => {
             event.preventDefault(); // Impede o recarregamento da página
+            console.log("Formulário de produto enviado.");
 
             const id = productIdInput.value;
             const name = productNameInput.value.trim();
@@ -537,6 +560,7 @@
             if (id) {
                 productData.id = id; // Se for edição, mantém o ID existente
             }
+            console.log("Dados do produto a serem salvos:", productData);
 
             await addOrUpdateProductToFirestore(productData); // Adiciona/atualiza no Firestore
             closeProductModal(); // Fecha o modal após salvar
@@ -544,6 +568,7 @@
 
         // Event listener para o botão "Atualizar Produtos" (recarrega do Firestore ou gera novos)
         refreshButton.addEventListener('click', async () => {
+            console.log("Botão 'Atualizar Produtos' clicado.");
             // Limpa os produtos existentes antes de gerar novos
             productsContainer.innerHTML = '';
             noProductsMessage.classList.add('hidden');
@@ -560,7 +585,9 @@
                 const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
                 const querySnapshot = await getDocs(productsCollectionRef);
                 // Aguarda todas as exclusões antes de adicionar os novos
+                console.log("Removendo produtos antigos do Firestore...");
                 await Promise.all(querySnapshot.docs.map(doc => deleteDoc(doc.ref)));
+                console.log("Produtos antigos removidos.");
 
                 // Salva os novos produtos gerados
                 await saveGeneratedProductsToFirestore(newProducts);
@@ -573,6 +600,7 @@
             refreshText.textContent = 'Atualizar Produtos';
             loadingSpinner.classList.add('hidden');
             refreshButton.disabled = false;
+            console.log("Processo de atualização de produtos concluído.");
         });
 
         // Inicia a aplicação quando a janela estiver totalmente carregada
