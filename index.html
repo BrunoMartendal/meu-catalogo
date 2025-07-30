@@ -143,9 +143,19 @@
         let userId;
         let products = []; // Para armazenar os produtos carregados do Firestore
 
-        // Configurações do Firebase (fornecidas pelo ambiente Canvas)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        // SUAS CONFIGURAÇÕES DO FIREBASE AQUI
+        const firebaseConfig = {
+            apiKey: "AIzaSyAz3k-6SadhShjLPtnnGDZgL7YyLtDui7k",
+            authDomain: "meu-catalogo-b5d8c.firebaseapp.com",
+            projectId: "meu-catalogo-b5d8c",
+            storageBucket: "meu-catalogo-b5d8c.firebasestorage.app",
+            messagingSenderId: "479600983332",
+            appId: "1:479600983332:web:45e59d890a87cc348247b1",
+            measurementId: "G-SM6QJESRRR"
+        };
+        // O appId para o caminho do Firestore será o do seu firebaseConfig
+        const appId = firebaseConfig.appId;
+        // initialAuthToken é fornecido pelo ambiente Canvas, mantenha como está
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // Elementos do DOM
@@ -160,7 +170,7 @@
         const productModal = document.getElementById('productModal');
         const modalTitle = document.getElementById('modalTitle');
         const productForm = document.getElementById('productForm');
-        const productIdInput = document.getElementById('productId');
+        const productIdInput = document = document.getElementById('productId');
         const productNameInput = document.getElementById('productName');
         const productDescriptionInput = document.getElementById('productDescription');
         const productPriceInput = document.getElementById('productPrice');
@@ -171,7 +181,7 @@
         // Elementos do Modal de Confirmação
         const confirmModal = document.getElementById('confirmModal');
         const cancelDeleteButton = document.getElementById('cancelDeleteButton');
-        const confirmDeleteButton = document.getElementById('confirmDeleteButton');
+        const confirmDeleteButton = document.getElementById('confirmButton'); // Correção aqui: era 'confirmDeleteButton'
         let productToDeleteId = null; // Variável para armazenar o ID do produto a ser excluído
 
         // --- Funções de Utilitário ---
