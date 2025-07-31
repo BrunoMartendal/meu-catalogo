@@ -607,6 +607,23 @@
             console.log("Processo de atualização de produtos concluído.");
         });
 
+        // Adicionando o event listener para o botão de confirmação de exclusão
+        // Colocado aqui para garantir que o elemento confirmDeleteButton já foi encontrado
+        // e para que o log de teste apareça.
+        confirmDeleteButton.addEventListener('click', async () => {
+            console.log(">>> TESTE: Botão 'Excluir' dentro do modal de confirmação clicado."); // Novo log de teste
+            if (productToDeleteId) {
+                console.log("productToDeleteId está definido:", productToDeleteId);
+                await deleteProductFromFirestore(productToDeleteId);
+                confirmModal.classList.add('hidden');
+                productToDeleteId = null;
+                console.log("Processo de exclusão iniciado e modal fechado.");
+            } else {
+                console.warn("productToDeleteId não está definido. Não é possível excluir.");
+            }
+        });
+
+
         // Inicia a aplicação quando a janela estiver totalmente carregada
         window.onload = initializeFirebaseAndLoadProducts;
     </script>
