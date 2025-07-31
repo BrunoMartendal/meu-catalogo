@@ -140,7 +140,7 @@
         let app;
         let db;
         let auth;
-        let userId;
+        let userId; // Este será o UID do proprietário do catálogo
         let products = []; // Para armazenar os produtos carregados do Firestore
 
         // SUAS CONFIGURAÇÕES DO FIREBASE AQUI
@@ -273,7 +273,8 @@
                 console.error("Firestore ou userId não inicializados. Não é possível salvar produto.");
                 return;
             }
-            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            // ALTERAÇÃO AQUI: Usando a nova coleção pública para o catálogo do proprietário
+            const productsCollectionRef = collection(db, `artifacts/${appId}/public_catalogs/${userId}/products`);
             try {
                 if (productData.id) {
                     // Atualiza um produto existente
@@ -298,7 +299,8 @@
                 console.error("Firestore ou userId não inicializados. Não é possível salvar produtos gerados.");
                 return;
             }
-            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            // ALTERAÇÃO AQUI: Usando a nova coleção pública para o catálogo do proprietário
+            const productsCollectionRef = collection(db, `artifacts/${appId}/public_catalogs/${userId}/products`);
             const savePromises = productsArray.map(async (product) => {
                 try {
                     // Gemini fornece um 'id', então usamos setDoc com esse ID
@@ -319,7 +321,8 @@
                 console.error("Firestore ou userId não inicializados. Não é possível carregar produtos.");
                 return [];
             }
-            const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+            // ALTERAÇÃO AQUI: Usando a nova coleção pública para o catálogo do proprietário
+            const productsCollectionRef = collection(db, `artifacts/${appId}/public_catalogs/${userId}/products`);
             const loadedProducts = [];
             try {
                 const querySnapshot = await getDocs(productsCollectionRef);
@@ -340,7 +343,8 @@
                 console.error("Firestore ou userId não inicializados. Não é possível excluir produto.");
                 return;
             }
-            const productDocRef = doc(db, `artifacts/${appId}/users/${userId}/products`, productId);
+            // ALTERAÇÃO AQUI: Usando a nova coleção pública para o catálogo do proprietário
+            const productDocRef = doc(db, `artifacts/${appId}/public_catalogs/${userId}/products`, productId);
             try {
                 await deleteDoc(productDocRef);
                 console.log("Produto excluído com ID: ", productId);
@@ -494,7 +498,6 @@
 
                 // Garante que o usuário esteja autenticado (anônimo se necessário)
                 // e que o userId esteja definido antes de carregar os produtos.
-                // Refatorado para usar onAuthStateChanged como o principal gatilho.
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
@@ -585,7 +588,7 @@
 
             if (newProducts.length > 0) {
                 // Remove os produtos antigos do Firestore antes de salvar os novos
-                const productsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+                const productsCollectionRef = collection(db, `artifacts/${appId}/public_catalogs/${userId}/products`);
                 const querySnapshot = await getDocs(productsCollectionRef);
                 // Aguarda todas as exclusões antes de adicionar os novos
                 console.log("Removendo produtos antigos do Firestore...");
