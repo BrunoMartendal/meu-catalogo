@@ -182,7 +182,6 @@
         const confirmModal = document.getElementById('confirmModal');
         const cancelDeleteButton = document.getElementById('cancelDeleteButton');
         const confirmDeleteButton = document.getElementById('confirmDeleteButton');
-        // Adicionando um log para verificar se o elemento do botão é encontrado
         console.log("Elemento confirmDeleteButton no script:", confirmDeleteButton);
         let productToDeleteId = null; // Variável para armazenar o ID do produto a ser excluído
 
@@ -495,33 +494,33 @@
 
                 // Garante que o usuário esteja autenticado (anônimo se necessário)
                 // e que o userId esteja definido antes de carregar os produtos.
-                let currentUser = auth.currentUser;
-                if (!currentUser) {
-                    console.log("Nenhum usuário autenticado. Tentando login anônimo...");
-                    try {
-                        if (initialAuthToken) {
-                            const userCredential = await signInWithCustomToken(auth, initialAuthToken);
-                            currentUser = userCredential.user;
-                        } else {
-                            const userCredential = await signInAnonymously(auth);
-                            currentUser = userCredential.user;
+                // Refatorado para usar onAuthStateChanged como o principal gatilho.
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Usuário autenticado (UID):", userId);
+                        await loadProducts(); // Carrega produtos APÓS userId estar garantido
+                    } else {
+                        console.log("Nenhum usuário logado. Tentando login anônimo...");
+                        try {
+                            if (initialAuthToken) {
+                                // Tenta com o token inicial se disponível
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                // Caso contrário, faz login anônimo
+                                await signInAnonymously(auth);
+                            }
+                            // onAuthStateChanged será chamado novamente com o usuário autenticado
+                        } catch (authError) {
+                            console.error("Erro durante o login anônimo/com token:", authError);
+                            console.error("Não foi possível autenticar o usuário. Não carregando produtos.");
+                            renderProducts([]);
+                            refreshText.textContent = 'Erro de autenticação';
+                            loadingSpinner.classList.add('hidden');
+                            refreshButton.disabled = false;
                         }
-                        console.log("Login anônimo/com token bem-sucedido.");
-                    } catch (authError) {
-                        console.error("Erro durante o login anônimo/com token:", authError);
-                        // Se o login falhar, não podemos prosseguir com o Firestore
-                        console.error("Não foi possível autenticar o usuário. Não carregando produtos.");
-                        renderProducts([]);
-                        refreshText.textContent = 'Erro de autenticação';
-                        loadingSpinner.classList.add('hidden');
-                        refreshButton.disabled = false;
-                        return; // Sai da função se a autenticação falhar
                     }
-                }
-
-                userId = currentUser.uid;
-                console.log("Usuário autenticado:", userId);
-                await loadProducts(); // Carrega produtos APÓS userId estar garantido
+                });
 
             } catch (error) {
                 console.error("Erro ao inicializar Firebase ou autenticar:", error);
